@@ -38,16 +38,48 @@ class VaultProvider extends ChangeNotifier {
   Future<void> addNote({
     required String title,
     required String content,
+    String username = '',
+    String password = '',
   }) async {
     final note = Note(
       id: DateTime.now().microsecondsSinceEpoch.toString(),
       title: title,
       content: content,
+      username: username,
+      password: password,
       createdAt: DateTime.now(),
     );
     _notes.insert(0, note);
     await _persist();
     notifyListeners();
+  }
+
+  /// Atualiza uma nota existente.
+  Future<void> updateNote(Note updated) async {
+    final i = _notes.indexWhere((n) => n.id == updated.id);
+    if (i < 0) return;
+    _notes[i] = updated;
+    await _persist();
+    notifyListeners();
+  }
+
+  /// Remove uma nota.
+  Future<void> deleteNote(String id) async {
+    _notes.removeWhere((n) => n.id == id);
+    await _persist();
+    notifyListeners();
+  }
+
+  /// `true` se outra entrada (diferente de [excludeNoteId]) usa a mesma senha.
+  bool isPasswordReusedElsewhere(String password, {String? excludeNoteId}) {
+    final p = password.trim();
+    if (p.isEmpty) return false;
+    return _notes.any(
+      (n) =>
+          n.id != excludeNoteId &&
+          n.password.trim().isNotEmpty &&
+          n.password == p,
+    );
   }
 
   Future<void> _persist() async {
