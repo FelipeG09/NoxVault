@@ -6,7 +6,7 @@ import '../models/security_analysis.dart';
 import '../providers/vault_provider.dart';
 import '../services/ai_security_service.dart';
 
-/// Tela de análise de segurança das senhas com IA (Google Gemini).
+/// Tela de análise de segurança das senhas com IA (GROQ / LLaMA).
 ///
 /// Envia apenas metadados das senhas — tamanho, diversidade de caracteres,
 /// reutilização e antiguidade. Nenhuma senha em texto puro é transmitida.
@@ -20,7 +20,7 @@ class SecurityAnalysisScreen extends StatefulWidget {
 enum _AnalysisState { initial, loading, result }
 
 class _SecurityAnalysisScreenState extends State<SecurityAnalysisScreen> {
-  static const _kApiKeyStorageKey = 'noxvault_gemini_api_key';
+  static const _kApiKeyStorageKey = 'noxvault_groq_api_key';
   static const _storage = FlutterSecureStorage();
 
   _AnalysisState _state = _AnalysisState.initial;
@@ -85,7 +85,7 @@ class _SecurityAnalysisScreenState extends State<SecurityAnalysisScreen> {
             ),
             const SizedBox(height: 12),
             const Text(
-              'O Google Gemini analisa metadados das suas senhas — '
+              'A IA analisa metadados das suas senhas — '
               'tamanho, variedade de caracteres, reutilização e tempo de uso. '
               'Nenhuma senha é enviada em texto puro.',
               textAlign: TextAlign.center,
@@ -257,6 +257,10 @@ class _SecurityAnalysisScreenState extends State<SecurityAnalysisScreen> {
   // ── Lógica de análise ──────────────────────────────────────────────────────
 
   Future<void> _analyze() async {
+    // Captura notes ANTES de qualquer await para evitar uso de context
+    // após gap assíncrono (causa: _dependents.isEmpty assertion).
+    final notes = context.read<VaultProvider>().notes;
+
     final apiKey = await _getOrRequestApiKey();
     if (apiKey == null || apiKey.isEmpty) return;
 
@@ -264,7 +268,6 @@ class _SecurityAnalysisScreenState extends State<SecurityAnalysisScreen> {
     setState(() => _state = _AnalysisState.loading);
 
     try {
-      final notes = context.read<VaultProvider>().notes;
       final service = AISecurityService(apiKey: apiKey);
       final result = await service.analyzePasswords(notes);
 
@@ -289,8 +292,8 @@ class _SecurityAnalysisScreenState extends State<SecurityAnalysisScreen> {
   /// Tenta obter a chave em ordem: variável de ambiente → storage → diálogo.
   Future<String?> _getOrRequestApiKey() async {
     // Variável de ambiente definida em tempo de compilação:
-    // flutter run --dart-define=GEMINI_API_KEY=sua_chave
-    const envKey = String.fromEnvironment('GEMINI_API_KEY');
+    // flutter run --dart-define=GROQ_API_KEY=sua_chave
+    const envKey = String.fromEnvironment('GROQ_API_KEY');
     if (envKey.isNotEmpty) return envKey;
 
     final stored = await _storage.read(key: _kApiKeyStorageKey);
@@ -309,13 +312,13 @@ class _SecurityAnalysisScreenState extends State<SecurityAnalysisScreen> {
       barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('Configurar API Gemini'),
+          title: const Text('Configurar API GROQ'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Informe sua chave da API Google Gemini para ativar '
+                'Informe sua chave da API GROQ para ativar '
                 'a análise de segurança com IA. A chave é salva de '
                 'forma criptografada no dispositivo.',
                 style: TextStyle(color: Colors.white70, height: 1.4),
@@ -326,7 +329,7 @@ class _SecurityAnalysisScreenState extends State<SecurityAnalysisScreen> {
                 obscureText: true,
                 decoration: InputDecoration(
                   labelText: 'API Key',
-                  hintText: 'AIzaSy...',
+                  hintText: 'gsk_...',
                   errorText: fieldError,
                   border: const OutlineInputBorder(),
                 ),
@@ -373,8 +376,8 @@ class _SecurityAnalysisScreenState extends State<SecurityAnalysisScreen> {
     final value = controller.text.trim();
     if (value.isEmpty) {
       setError('Insira a chave de API');
-    } else if (!value.startsWith('AIzaSy') || value.length < 35) {
-      setError('Chave inválida. Chaves do Gemini começam com "AIzaSy".');
+    } else if (!value.startsWith('gsk_') || value.length < 20) {
+      setError('Chave inválida. Chaves da GROQ começam com "gsk_".');
     } else {
       Navigator.pop(ctx, value);
     }
@@ -384,7 +387,7 @@ class _SecurityAnalysisScreenState extends State<SecurityAnalysisScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Redefinir chave de API?'),
+        title: const Text('Redefinir chave GROQ?'),
         content: const Text(
           'A chave salva será removida. Você poderá inserir uma nova '
           'na próxima análise.',

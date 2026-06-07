@@ -14,6 +14,7 @@ class SecureStorageService {
   static const String notesKey          = 'noxvault_notes_enc';
   static const String pinLockoutKey     = 'noxvault_pin_lockout_until_ms';
   static const String pinFailCountKey   = 'noxvault_pin_fail_count';
+  static const String vaultKeyKey       = 'noxvault_vault_key';
 
   // ── PIN hash ──────────────────────────────────────────────────────────────
 
@@ -59,4 +60,13 @@ class SecureStorageService {
 
   Future<void> writePinFailCount(int count) =>
       _storage.write(key: pinFailCountKey, value: '$count');
+
+  // ── Chave AES do cofre (para unlock por biometria) ────────────────────────
+
+  Future<String?> readVaultKey() => _storage.read(key: vaultKeyKey);
+
+  Future<void> writeVaultKey(String keyBase64) =>
+      _storage.write(key: vaultKeyKey, value: keyBase64);
+
+  Future<void> deleteVaultKey() => _storage.delete(key: vaultKeyKey);
 }

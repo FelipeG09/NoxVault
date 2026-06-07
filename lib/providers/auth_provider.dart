@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -190,6 +191,7 @@ class AuthProvider extends ChangeNotifier {
       // com a chave antiga ficam inacessíveis. O vault é limpo para garantir
       // integridade — comportamento esperado num cenário de perda de PIN.
       await _storage.writeEncryptedNotes('');
+      await _storage.deleteVaultKey();
       await _persistNewPin(n);
       _clearPinRecoveryArm();
       _pinFailCount = 0;
@@ -337,17 +339,17 @@ class AuthProvider extends ChangeNotifier {
       );
 
       if (ok) {
-        // Biometria não deriva a chave AES diretamente — ao desbloquear via
-        // biometria, a chave AES deve ser lida de um slot protegido, ou o
-        // usuário deve inserir o PIN uma vez após reinstalar.
-        // Por ora: se a chave ainda está em memória (sessão em background),
-        // mantém. Caso contrário, pede PIN para derivar a chave.
         if (_vaultKey == null) {
-          _biometricAttemptsThisSession++;
-          _errorMessage =
-              'Sessão expirada. Por favor, insira seu PIN para reabrir o cofre.';
-          notifyListeners();
-          return false;
+          // Tenta recuperar a chave do secure storage (salva ao verificar PIN)
+          final stored = await _storage.readVaultKey();
+          if (stored == null || stored.isEmpty) {
+            _biometricAttemptsThisSession++;
+            _errorMessage =
+                'Insira seu PIN uma vez para ativar o desbloqueio biométrico.';
+            notifyListeners();
+            return false;
+          }
+          _vaultKey = base64.decode(stored);
         }
         _isAuthenticated = true;
         _errorMessage = null;
@@ -422,8 +424,9 @@ class AuthProvider extends ChangeNotifier {
         await _storage.writePinFailCount(0);
         _pinLockoutUntilMs = null;
         await _storage.writePinLockoutUntilMs(null);
-        // Deriva chave AES em memória — nunca persistida
         _vaultKey = _crypto.deriveKey(pin, storedHash);
+        // Persiste a chave para uso no desbloqueio biométrico
+        await _storage.writeVaultKey(base64.encode(_vaultKey!));
         _isAuthenticated = true;
         notifyListeners();
         return true;
@@ -460,7 +463,9 @@ class AuthProvider extends ChangeNotifier {
   /// Sai do cofre: apaga a chave AES da memória e desmarca autenticado.
   Future<void> logout() async {
     _isAuthenticated = false;
-    _vaultKey = null; // Chave apagada da memória no logout
+    _vaultKey = null;
+    // Mantém a chave no storage para permitir reentrada por biometria.
+    // Só apaga se o usuário redefinir o PIN (completeMasterPinRecovery).
     resetUnlockSession();
     notifyListeners();
   }
@@ -477,6 +482,7 @@ class AuthProvider extends ChangeNotifier {
     await _storage.writePinHash(hash);
     _hasStoredPin = true;
     _vaultKey = _crypto.deriveKey(pin.trim(), hash);
+    await _storage.writeVaultKey(base64.encode(_vaultKey!));
   }
 
   String? _validateNewPinPair(String newPin, String confirm) {

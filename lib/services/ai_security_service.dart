@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:google_generative_ai/google_generative_ai.dart';
+import 'package:http/http.dart' as http;
 
 import '../models/note.dart';
 import '../models/security_analysis.dart';
@@ -28,16 +28,20 @@ class AISecurityException implements Exception {
   String toString() => 'AISecurityException(${type.name}): $message';
 }
 
-/// Analisa a segurança das senhas do cofre via Google Gemini.
+/// Analisa a segurança das senhas do cofre via GROQ API (LLaMA).
 ///
 /// SEGURANÇA: Somente metadados (tamanho, tipos de caractere, reutilização,
 /// antiguidade) são transmitidos. Nenhuma senha em texto puro é enviada à API.
 class AISecurityService {
+  static const _groqEndpoint =
+      'https://api.groq.com/openai/v1/chat/completions';
+  static const _model = 'llama-3.3-70b-versatile';
+
   final String _apiKey;
 
   AISecurityService({required String apiKey}) : _apiKey = apiKey;
 
-  /// Extrai metadados de [notes] e consulta o Gemini para análise de segurança.
+  /// Extrai metadados de [notes] e consulta a GROQ para análise de segurança.
   Future<SecurityAnalysis> analyzePasswords(List<Note> notes) async {
     await _assertConnected();
 
@@ -58,7 +62,6 @@ class AISecurityService {
       );
     }
 
-    // Coleta senhas apenas para detectar reutilização — não são enviadas
     final allPasswords = notesWithPassword.map((n) => n.password).toList();
 
     final metadata = notesWithPassword.map((note) {
@@ -82,16 +85,43 @@ class AISecurityService {
     final metadataJson = const JsonEncoder.withIndent('  ').convert(metadata);
 
     try {
-      final model = GenerativeModel(
-        model: 'gemini-1.5-flash',
-        apiKey: _apiKey,
-      );
-
-      final response = await model
-          .generateContent([Content.text(_buildPrompt(metadataJson))])
+      final response = await http
+          .post(
+            Uri.parse(_groqEndpoint),
+            headers: {
+              'Authorization': 'Bearer $_apiKey',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              'model': _model,
+              'messages': [
+                {'role': 'user', 'content': _buildPrompt(metadataJson)},
+              ],
+              'temperature': 0.3,
+              'max_tokens': 1024,
+            }),
+          )
           .timeout(const Duration(seconds: 30));
 
-      return _parseResponse(response.text ?? '');
+      if (response.statusCode == 401 || response.statusCode == 403) {
+        throw const AISecurityException(
+          AISecurityErrorType.invalidApiKey,
+          'Chave de API inválida ou sem permissão de acesso.',
+        );
+      }
+
+      if (response.statusCode != 200) {
+        throw AISecurityException(
+          AISecurityErrorType.unknown,
+          'Erro ao chamar a API: HTTP ${response.statusCode}.',
+        );
+      }
+
+      final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+      final content =
+          (decoded['choices'] as List).first['message']['content'] as String;
+
+      return _parseResponse(content);
     } on AISecurityException {
       rethrow;
     } on TimeoutException {
@@ -101,11 +131,10 @@ class AISecurityService {
       );
     } catch (e) {
       final msg = e.toString();
-      // Detecta erros comuns de chave inválida / acesso negado
-      if (msg.contains('API_KEY') ||
+      if (msg.contains('401') ||
           msg.contains('403') ||
-          msg.contains('PERMISSION_DENIED') ||
-          msg.contains('invalid')) {
+          msg.contains('invalid_api_key') ||
+          msg.contains('authentication')) {
         throw const AISecurityException(
           AISecurityErrorType.invalidApiKey,
           'Chave de API inválida ou sem permissão de acesso.',
@@ -113,7 +142,7 @@ class AISecurityService {
       }
       throw AISecurityException(
         AISecurityErrorType.unknown,
-        'Erro ao chamar a API Gemini: $msg',
+        'Erro ao chamar a API: $msg',
       );
     }
   }
@@ -129,7 +158,7 @@ class AISecurityService {
     }
   }
 
-  /// Monta o prompt enviado ao Gemini com os metadados JSON das senhas.
+  /// Monta o prompt enviado à GROQ com os metadados JSON das senhas.
   String _buildPrompt(String metadataJson) => '''
 Você é um especialista em segurança da informação. Analise os metadados de senhas abaixo.
 
@@ -153,11 +182,10 @@ Metadados das senhas (sem texto das senhas):
 $metadataJson
 ''';
 
-  /// Remove eventual marcação de markdown e faz parse do JSON do Gemini.
+  /// Remove eventual marcação de markdown e faz parse do JSON da resposta.
   SecurityAnalysis _parseResponse(String raw) {
     var text = raw.trim();
 
-    // O modelo às vezes envolve a resposta em ```json ... ``` mesmo quando pedido contrário
     if (text.startsWith('```')) {
       text = text
           .replaceFirst(RegExp(r'^```(?:json)?\s*'), '')

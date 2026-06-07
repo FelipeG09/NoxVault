@@ -20,8 +20,8 @@ dependencies:
   # Armazenamento seguro (Keystore/Keychain do SO)
   flutter_secure_storage: ^10.0.0
 
-  # Google Gemini AI — análise de metadados de senhas
-  google_generative_ai: ^0.4.0
+  # HTTP para chamadas à API GROQ (análise de senhas com IA)
+  http: ^1.2.2
 
   # Verificação de conectividade de rede
   connectivity_plus: ^7.1.1

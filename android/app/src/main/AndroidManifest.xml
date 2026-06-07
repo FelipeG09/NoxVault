@@ -4,6 +4,9 @@
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <uses-permission android:name="android.permission.USE_FINGERPRINT" />
 
+    <!-- Internet access for GROQ AI API -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
         android:label="noxvault"
         android:name="${applicationName}"
