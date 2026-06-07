@@ -1,0 +1,28 @@
+# Flutter
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+
+# Build
+build/
+
+# Android Studio
+.idea/
+.gradle/
+
+# APKs
+*.apk
+*.aab
+
+# ZIP
+*.zip
+
+# Logs
+*.log
+
+# VSCode
+.vscode/
+
+# Mac/Linux
+.DS_Store

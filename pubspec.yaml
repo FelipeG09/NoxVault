@@ -1,0 +1,42 @@
+name: noxvault
+description: "Cofre de senhas local com autenticação por PIN e biometria."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  provider: ^6.1.2
+  cupertino_icons: ^1.0.8
+
+  # Autenticação biométrica (Face ID / Touch ID / impressão digital)
+  local_auth: ^3.0.1
+
+  # Armazenamento seguro (Keystore/Keychain do SO)
+  flutter_secure_storage: ^10.0.0
+
+  # Google Gemini AI — análise de metadados de senhas
+  google_generative_ai: ^0.4.0
+
+  # Verificação de conectividade de rede
+  connectivity_plus: ^7.1.1
+
+  # Criptografia: AES-256 para notas + PBKDF2 para derivação de chave do PIN
+  encrypt: ^5.0.3
+  pointycastle: ^3.9.1
+
+  # Hash SHA-256 para PIN (salt + hash)
+  crypto: ^3.0.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
